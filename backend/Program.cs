@@ -5,14 +5,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? $"Host={builder.Configuration["DB_HOST"] ?? "localhost"};Port={builder.Configuration["DB_PORT"] ?? "5432"};Database={builder.Configuration["DB_NAME"] ?? "appdb"};Username={builder.Configuration["DB_USER"] ?? "postgres"};Password={builder.Configuration["DB_PASS"] ?? "postgres"};";
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString)
+           .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // Services
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
 

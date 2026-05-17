@@ -31,30 +31,44 @@
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Docker Bridge Network                 │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────┐  │
-│  │   Frontend   │───▶│    Backend   │───▶│ Postgres │  │
-│  │  (Nginx +    │    │  (.NET 10    │    │  (17)    │  │
-│  │   Angular 21)│    │   API)       │    │          │  │
-│  │  :80         │    │  :5000       │    │  :5432   │  │
-│  └──────────────┘    └──────────────┘    └──────────┘  │
-│       ▲                     ▲                           │
-│       │                     │                           │
-│  ┌────┴─────────────────────┴────┐                      │
-│  │     Host: localhost:80        │                      │
-│  └───────────────────────────────┘                      │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                    Docker Bridge Network                                │
+│                                                                       │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐        │
+│  │   Frontend   │───▶│   Load Balancer  │───▶│    Backend   │───▶│
+│  │  (Nginx +    │    │   (Nginx LB)     │    │  (.NET 10    │    │
+│  │   Angular 21)│    │   Round-Robin    │    │   API)       │    │
+│  │  :80         │    │   :8080          │    │  :5000 x N   │    │
+│  └──────────────┘    └──────────────────┘    └──────────────┘    │
+│       ▲                     ▲                     ▲                 │
+│       │                     │                     │                 │
+│  ┌────┴─────────────────────┴─────────────────────┴────┐           │
+│  │     Host: localhost:80 (frontend)                    │           │
+│  │     Host: localhost:8080 (proxy/LB)                  │           │
+│  └─────────────────────────────────────────────────────┘           │
+│                                                                       │
+│  ┌──────────────┐                                                    │
+│  │   Postgres   │                                                    │
+│  │   (17)       │                                                    │
+│  │   :5432      │                                                    │
+│  └──────────────┘                                                    │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 **Data Flow:**
 1. User accesses `http://localhost:80` in browser
 2. Nginx serves Angular static files (SPA)
 3. Angular app makes API calls to `/api/*`
-4. Nginx proxies `/api/*` requests to `.NET backend`
-5. Backend queries PostgreSQL for data
-6. Response flows back: PostgreSQL → Backend → Nginx → Browser
+4. Frontend Nginx proxies `/api/*` requests to the **load balancer** (proxy service)
+5. Load balancer distributes requests across **all backend replicas** (round-robin)
+6. Backend queries PostgreSQL for data
+7. Response flows back: PostgreSQL → Backend → Load Balancer → Frontend Nginx → Browser
+
+**Load Balancing:**
+- The proxy service uses **nginx round-robin** load balancing by default
+- When backend is scaled with `--scale backend=N`, the proxy automatically distributes traffic across all N replicas
+- `proxy_next_upstream` ensures automatic failover if a backend replica becomes unhealthy
+- No manual configuration needed - Docker DNS resolves `backend` to all running containers
 
 ---
 
@@ -92,8 +106,9 @@ docker compose logs -f
 
 # 5. Access the application
 # Frontend: http://localhost:80
-# Backend API: http://localhost:5000/api/items
-# Backend Health: http://localhost:5000/healthz
+# Backend API (via LB): http://localhost:8080/api/items
+# Backend Health: http://localhost:8080/healthz
+# Backend API (direct): http://localhost:5000/api/items
 # Swagger UI: http://localhost:5000/swagger
 ```
 
@@ -144,6 +159,10 @@ Project/
 │           ├── app.component.ts    # Main component (CRUD UI)
 │           ├── app.component.html
 │           └── app.component.css
+│
+├── proxy/                          # Nginx Reverse Proxy / Load Balancer
+│   ├── Dockerfile                  # Lightweight nginx:alpine
+│   └── nginx.conf                  # Upstream backend pool + round-robin LB
 ```
 
 ---
@@ -259,15 +278,42 @@ networks:
 
 **DNS-based service discovery:**
 - Backend connects to database using hostname `postgres`
-- Nginx proxies to backend using hostname `backend`
+- Frontend Nginx proxies `/api/*` to the load balancer using hostname `proxy`
+- Load balancer uses Docker DNS to resolve `backend` to all running backend containers
 - No hardcoded IPs needed
 
 **Port mapping (host → container):**
 | Service | Host Port | Container Port | Purpose |
 |---------|-----------|---------------|---------|
 | Frontend | 80 | 80 | Web UI |
+| Proxy (LB) | 8080 | 8080 | API Load Balancer |
 | Backend | 5000 | 5000 | REST API |
 | Postgres | 5432 | 5432 | Database |
+
+### Load Balancing
+
+The proxy service implements **nginx round-robin load balancing** across backend replicas:
+
+```nginx
+upstream backend_pool {
+    server backend:5000;  # Docker DNS resolves to all backend containers
+}
+```
+
+**Key features:**
+- **Round-robin**: Requests distributed evenly across all healthy backend replicas
+- **Automatic failover**: `proxy_next_upstream` retries on error/timeout/5xx
+- **No config changes needed**: Scaling with `--scale` automatically updates the pool
+- **Health-aware**: Proxy only sends traffic to healthy backends
+
+**Verify load balancing:**
+```bash
+# Scale backend to 3 replicas
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --scale backend=3
+
+# Send 6 requests - should be distributed across 3 backends (2 each)
+for i in {1..6}; do curl -s http://localhost:5000/api/items | jq '.[0].name'; done
+```
 
 ### Volumes
 
@@ -288,11 +334,12 @@ volumes:
 
 ### Service Definitions
 
-The `docker-compose.yml` defines three services:
+The `docker-compose.yml` defines four services:
 
 | Service | Image/Build | Ports | Restart |
 |---------|-------------|-------|---------|
 | `frontend` | Built from `./frontend/Dockerfile` | 80:80 | unless-stopped |
+| `proxy` | Built from `./proxy/Dockerfile` | 8080:8080 | unless-stopped |
 | `backend` | Built from `./backend/Dockerfile` | 5000:5000 | unless-stopped |
 | `postgres` | `postgres:17-alpine` | 5432:5432 | unless-stopped |
 
@@ -306,36 +353,54 @@ backend:
     postgres:
       condition: service_healthy    # Wait for DB to be ready
 
+proxy:
+  depends_on:
+    backend:
+      condition: service_healthy    # Wait for backend to be ready
+
 frontend:
   depends_on:
-    - backend                      # Wait for backend to start
+    proxy:
+      condition: service_healthy    # Wait for LB to be ready
 ```
 
 This ensures:
 1. PostgreSQL starts and passes health checks first
 2. Backend starts only when PostgreSQL is healthy
-3. Frontend starts after backend is running
+3. Proxy (load balancer) starts only when backend is healthy
+4. Frontend starts after the load balancer is ready
 
 ### Scaling
 
-Scale the backend to handle more requests:
+Scale the backend to handle more requests. The **proxy (load balancer) automatically distributes traffic** across all replicas using round-robin:
 
 ```bash
+# Start with 1 backend replica
+docker compose up -d
+
 # Scale backend to 3 replicas
 docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --scale backend=3
 
 # Verify
 docker compose ps
-# Shows 3 backend containers
+# Shows: app-backend (1/3), app-backend-1 (2/3), app-backend-2 (3/3)
 
-# Scale down
+# Verify load balancing - requests distributed across replicas
+for i in {1..6}; do curl -s http://localhost:8080/api/items | jq '.[0].name'; done
+
+# Scale down to 1 replica
 docker compose up -d --scale backend=1
 
 # Scale frontend (for static content distribution)
 docker compose up -d --scale frontend=2
 ```
 
-**Note:** Docker Compose scaling creates multiple containers with the same name. For production load balancing across replicas, integrate with a reverse proxy (Nginx, Traefik) or use Docker Swarm / Kubernetes.
+**How it works:**
+1. `--scale backend=3` creates 3 containers: `app-backend`, `app-backend-1`, `app-backend-2`
+2. Docker DNS resolves the `backend` hostname to all 3 container IPs
+3. The proxy's nginx `upstream backend_pool` block uses DNS to discover all backends
+4. Nginx round-robin distributes requests evenly: request 1→backend-1, request 2→backend-2, request 3→backend-3, request 4→backend-1, etc.
+5. `proxy_next_upstream` automatically retries on a different backend if one fails
 
 ### Rolling Updates
 
@@ -348,10 +413,13 @@ docker compose pull
 # 2. Rolling update backend (one at a time)
 docker compose up -d --no-deps --force-recreate backend
 
-# 3. Rolling update frontend
+# 3. Rolling update proxy (load balancer)
+docker compose up -d --no-deps --force-recreate proxy
+
+# 4. Rolling update frontend
 docker compose up -d --no-deps --force-recreate frontend
 
-# 4. Rolling update all services
+# 5. Rolling update all services
 docker compose up -d --force-recreate
 ```
 
@@ -368,8 +436,8 @@ docker compose ps
 
 **Update a single service with dependency chain:**
 ```bash
-# Update backend (will restart backend + frontend since frontend depends on it)
-docker compose up -d --no-deps --force-recreate backend frontend
+# Update backend (will restart proxy + frontend since they depend on it)
+docker compose up -d --no-deps --force-recreate backend proxy frontend
 ```
 
 ---
@@ -443,9 +511,15 @@ docker compose up -d
 
 ### Frontend shows blank page
 
-- Ensure backend is running: `curl http://localhost:5000/api/items`
+- Ensure backend is running: `curl http://localhost:8080/api/items`
 - Check browser console for CORS errors
 - Verify Nginx is serving files: `curl http://localhost/`
+
+### API returns 502 Bad Gateway
+
+- Check proxy is healthy: `docker inspect --format='{{.State.Health.Status}}' app-proxy`
+- Check backend containers: `docker compose ps | grep backend`
+- Verify proxy can reach backend: `docker compose exec proxy wget -qO- http://backend:5000/healthz`
 
 ### Database connection refused
 
@@ -479,10 +553,12 @@ docker compose up -d backend
 |----------|---------------|
 | **Multi-stage builds** | Backend: SDK → ASP.NET Runtime; Frontend: Node → Nginx |
 | **Alpine-based images** | `postgres:17-alpine`, `nginx:alpine`, `node:20-alpine` |
-| **Health checks** | All 3 services have `HEALTHCHECK` / `healthcheck` |
+| **Health checks** | All 4 services have `healthcheck` |
 | **Dependency ordering** | `depends_on` with `condition: service_healthy` |
 | **Named volumes** | `postgres-data` for persistent database storage |
 | **Custom bridge network** | `app-network` for service discovery via DNS |
+| **Load balancing** | Nginx round-robin across backend replicas |
+| **Automatic failover** | `proxy_next_upstream` retries on backend failure |
 | **Non-root considerations** | Minimal runtime images reduce attack surface |
 | **Environment variables** | Configurable via environment, not hardcoded |
 | **Restart policies** | `unless-stopped` for automatic recovery |
@@ -501,21 +577,21 @@ docker compose up -d backend
 Return all items.
 
 ```bash
-curl http://localhost:5000/api/items
+curl http://localhost:8080/api/items
 ```
 
 ### GET `/api/items/{id}`
 Return a single item.
 
 ```bash
-curl http://localhost:5000/api/items/1
+curl http://localhost:8080/api/items/1
 ```
 
 ### POST `/api/items`
 Create a new item.
 
 ```bash
-curl -X POST http://localhost:5000/api/items \
+curl -X POST http://localhost:8080/api/items \
   -H "Content-Type: application/json" \
   -d '{"name":"Monitor","description":"4K display","price":399.99}'
 ```
@@ -524,7 +600,7 @@ curl -X POST http://localhost:5000/api/items \
 Update an existing item.
 
 ```bash
-curl -X PUT http://localhost:5000/api/items/1 \
+curl -X PUT http://localhost:8080/api/items/1 \
   -H "Content-Type: application/json" \
   -d '{"id":1,"name":"Laptop Pro","description":"Updated","price":1299.99}'
 ```
@@ -533,14 +609,14 @@ curl -X PUT http://localhost:5000/api/items/1 \
 Delete an item.
 
 ```bash
-curl -X DELETE http://localhost:5000/api/items/1
+curl -X DELETE http://localhost:8080/api/items/1
 ```
 
 ### GET `/healthz`
-Backend health check endpoint.
+Backend health check endpoint (via load balancer).
 
 ```bash
-curl http://localhost:5000/healthz
+curl http://localhost:8080/healthz
 ```
 
 ---

@@ -35,7 +35,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: app-backend
     restart: unless-stopped
     environment:
       - DB_HOST=postgres
@@ -50,13 +49,35 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:5000/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # Nginx Reverse Proxy / Load Balancer
+  # Distributes API requests across multiple backend replicas (round-robin)
+  # -------------------------------------------------------------------------
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: app-proxy
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
-      - "5000:5000"
+      - "8080:8080"
 
   # -------------------------------------------------------------------------
   # Angular 21 Frontend (served via Nginx)
@@ -68,11 +89,12 @@ services:
     container_name: app-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      proxy:
+        condition: service_healthy
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

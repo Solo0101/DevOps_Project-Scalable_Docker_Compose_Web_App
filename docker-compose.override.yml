@@ -4,13 +4,17 @@
 # =============================================================================
 
 # -------------------------------------------------------------------------
-# Scaling: Run 3 replicas of the backend
+# Scaling: Run 3 replicas of the backend with load balancing via proxy
 # -------------------------------------------------------------------------
 # To scale backend to 3 replicas:
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --scale backend=3
 #
-# Note: Docker Compose scaling creates multiple containers with the same name.
-# For production load balancing, use a reverse proxy or orchestration tool.
+# The proxy (nginx reverse proxy) automatically load-balances across all
+# backend replicas using round-robin algorithm. No manual configuration needed.
+#
+# Verify load balancing:
+#   for i in {1..6}; do curl -s http://localhost:5000/api/items | jq '.[0].name'; done
+# Requests will be distributed across backend-1, backend-2, backend-3
 # -------------------------------------------------------------------------
 
 services:
@@ -26,7 +30,7 @@ services:
       - ASPNETCORE_URLS=http://+:5000
     # Health check (inherited, shown explicitly)
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:5000/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -36,9 +40,9 @@ services:
     # Can also scale frontend for static content distribution
     # docker compose up -d --scale frontend=2
     depends_on:
-      - backend
+      - proxy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
