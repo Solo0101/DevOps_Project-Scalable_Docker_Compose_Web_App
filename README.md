@@ -186,9 +186,9 @@ ENTRYPOINT ["dotnet", "Backend.dll"]
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci                  # Deterministic installs
+RUN npm install                  # Install dependencies
 COPY . .
-RUN npm run build -- --configuration production
+RUN npm run build -- --configuration production  # Build with @angular/build:application
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine
@@ -224,9 +224,9 @@ healthcheck:
   retries: 5
   start_period: 20s
 
-# Frontend (Nginx) - HTTP endpoint
+# Frontend (Nginx) - uses wget (Alpine)
 healthcheck:
-  test: ["CMD-SHELL", "curl -f http://localhost/nginx-health || exit 1"]
+  test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
   interval: 15s
   timeout: 5s
   retries: 5

@@ -38,7 +38,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/nginx-health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
