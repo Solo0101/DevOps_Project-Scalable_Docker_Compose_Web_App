@@ -1,0 +1,46 @@
+# =====================
+# .NET / C#
+# =====================
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.user.options
+
+# =====================
+# Node / Angular
+# =====================
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+# =====================
+# Docker
+# =====================
+.dockerignore
+
+# =====================
+# IDE
+# =====================
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# =====================
+# Logs
+# =====================
+*.log
+logs/
+
+# =====================
+# Environment
+# =====================
+.env
+.env.local

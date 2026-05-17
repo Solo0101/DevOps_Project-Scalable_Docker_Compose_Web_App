@@ -1,0 +1,58 @@
+<div class="container">
+  <header>
+    <h1>{{ title }}</h1>
+    <p class="subtitle">Multi-tier Docker Application</p>
+  </header>
+
+  @if (successMessage) {
+    <div class="alert success">{{ successMessage }}</div>
+  }
+  @if (error) {
+    <div class="alert error">{{ error }}</div>
+  }
+
+  <div class="toolbar">
+    <button class="btn btn-primary" (click)="loadItems()">Refresh</button>
+    <button class="btn btn-secondary" (click)="showForm = !showForm">
+      {{ showForm ? 'Cancel' : 'Add Item' }}
+    </button>
+  </div>
+
+  @if (showForm) {
+    <div class="form-card">
+      <h3>Add New Item</h3>
+      <input [(ngModel)]="newItem.name" placeholder="Item name" class="input" />
+      <input [(ngModel)]="newItem.description" placeholder="Description" class="input" />
+      <input [(ngModel)]="newItem.price" type="number" placeholder="Price" class="input" />
+      <button class="btn btn-primary" (click)="addItem()">Save</button>
+    </div>
+  }
+
+  @if (loading) {
+    <div class="loading">Loading items...</div>
+  } @else {
+    @if (items.length === 0) {
+      <div class="empty">No items found. Add one above!</div>
+    } @else {
+      <div class="items-grid">
+        @for (item of items; track item.id) {
+          <div class="card">
+            <div class="card-header">
+              <h3>{{ item.name }}</h3>
+              <span class="price">${{ item.price | number:'1.2-2' }}</span>
+            </div>
+            <p class="description">{{ item.description }}</p>
+            <div class="card-footer">
+              <small>Added: {{ item.createdAt | date:'mediumDate' }}</small>
+              <button class="btn btn-danger" (click)="deleteItem(item.id)">Delete</button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  }
+
+  <footer>
+    <p>Frontend: Angular 21 | Backend: .NET 10 | Database: PostgreSQL</p>
+  </footer>
+</div>

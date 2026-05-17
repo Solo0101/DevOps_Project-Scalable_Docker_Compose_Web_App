@@ -1,0 +1,45 @@
+# =============================================================================
+# Docker Compose Override - Scaling & Rolling Updates Demo
+# Usage: docker compose -f docker-compose.yml -f docker-compose.override.yml up
+# =============================================================================
+
+# -------------------------------------------------------------------------
+# Scaling: Run 3 replicas of the backend
+# -------------------------------------------------------------------------
+# To scale backend to 3 replicas:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --scale backend=3
+#
+# Note: Docker Compose scaling creates multiple containers with the same name.
+# For production load balancing, use a reverse proxy or orchestration tool.
+# -------------------------------------------------------------------------
+
+services:
+  backend:
+    # Environment for scaled instances
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=appdb
+      - DB_USER=postgres
+      - DB_PASS=postgres
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
+    # Health check (inherited, shown explicitly)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    # Can also scale frontend for static content distribution
+    # docker compose up -d --scale frontend=2
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
