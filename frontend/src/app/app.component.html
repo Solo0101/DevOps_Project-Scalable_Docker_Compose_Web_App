@@ -1,58 +1,167 @@
-<div class="container">
-  <header>
-    <h1>{{ title }}</h1>
-    <p class="subtitle">Multi-tier Docker Application</p>
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <h1>📦 Item Manager</h1>
+      <p class="subtitle">Full CRUD with live preview · Dockerised Multi-Tier App</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-refresh" (click)="loadItems()" [disabled]="loading">
+        {{ loading ? '⏳' : '🔄' }} Refresh
+      </button>
+      <button class="btn btn-create" (click)="openCreate()">➕ New Item</button>
+    </div>
   </header>
 
-  @if (successMessage) {
-    <div class="alert success">{{ successMessage }}</div>
+  <!-- Alerts -->
+  @if (successMsg) {
+    <div class="alert alert-success">{{ successMsg }}</div>
   }
   @if (error) {
-    <div class="alert error">{{ error }}</div>
+    <div class="alert alert-error">{{ error }}</div>
   }
 
-  <div class="toolbar">
-    <button class="btn btn-primary" (click)="loadItems()">Refresh</button>
-    <button class="btn btn-secondary" (click)="showForm = !showForm">
-      {{ showForm ? 'Cancel' : 'Add Item' }}
-    </button>
-  </div>
-
-  @if (showForm) {
-    <div class="form-card">
-      <h3>Add New Item</h3>
-      <input [(ngModel)]="newItem.name" placeholder="Item name" class="input" />
-      <input [(ngModel)]="newItem.description" placeholder="Description" class="input" />
-      <input [(ngModel)]="newItem.price" type="number" placeholder="Price" class="input" />
-      <button class="btn btn-primary" (click)="addItem()">Save</button>
-    </div>
-  }
-
-  @if (loading) {
-    <div class="loading">Loading items...</div>
-  } @else {
-    @if (items.length === 0) {
-      <div class="empty">No items found. Add one above!</div>
-    } @else {
-      <div class="items-grid">
-        @for (item of items; track item.id) {
-          <div class="card">
-            <div class="card-header">
-              <h3>{{ item.name }}</h3>
-              <span class="price">${{ item.price | number:'1.2-2' }}</span>
+  <!-- Preview Panel -->
+  @if (previewMode !== 'none' && previewItem) {
+    <div class="preview-panel">
+      <div class="preview-header">
+        <span class="preview-badge" [class.badge-create]="previewAction==='create'" [class.badge-update]="previewAction==='update'" [class.badge-delete]="previewAction==='delete'">
+          {{ previewAction === 'create' ? '➕ CREATE PREVIEW' : previewAction === 'update' ? '✏️ UPDATE PREVIEW' : '🗑️ DELETE PREVIEW' }}
+        </span>
+        <button class="btn btn-sm btn-cancel" (click)="previewMode='none'">✕ Close</button>
+      </div>
+      <div class="preview-card">
+        <div class="preview-grid">
+          <div class="preview-field">
+            <label>Name</label>
+            <div class="preview-value">{{ previewItem.name }}</div>
+          </div>
+          <div class="preview-field">
+            <label>Description</label>
+            <div class="preview-value">{{ previewItem.description || '—' }}</div>
+          </div>
+          <div class="preview-field">
+            <label>Price</label>
+            <div class="preview-value price">{{ priceStr(previewItem) }}</div>
+          </div>
+          @if (previewAction !== 'create') {
+            <div class="preview-field">
+              <label>Created</label>
+              <div class="preview-value">{{ formatDate(previewItem.createdAt) }}</div>
             </div>
-            <p class="description">{{ item.description }}</p>
-            <div class="card-footer">
-              <small>Added: {{ item.createdAt | date:'mediumDate' }}</small>
-              <button class="btn btn-danger" (click)="deleteItem(item.id)">Delete</button>
-            </div>
+          }
+        </div>
+        @if (previewAction === 'delete') {
+          <div class="preview-actions">
+            <button class="btn btn-danger" (click)="confirmDelete()">🗑️ Confirm Delete</button>
+            <button class="btn btn-sm btn-cancel" (click)="previewMode='none'">Cancel</button>
+          </div>
+        }
+        @if (previewAction === 'create') {
+          <div class="preview-actions">
+            <button class="btn btn-create" (click)="confirmCreate()">✅ Create Item</button>
+            <button class="btn btn-sm btn-cancel" (click)="previewMode='none'">Cancel</button>
+          </div>
+        }
+        @if (previewAction === 'update') {
+          <div class="preview-actions">
+            <button class="btn btn-update" (click)="confirmUpdate()">✅ Save Changes</button>
+            <button class="btn btn-sm btn-cancel" (click)="previewMode='none'">Cancel</button>
           </div>
         }
       </div>
-    }
+    </div>
   }
 
-  <footer>
-    <p>Frontend: Angular 21 | Backend: .NET 10 | Database: PostgreSQL</p>
+  <!-- Create Form -->
+  @if (isCreateOpen) {
+    <div class="card form-card">
+      <h3>➕ Create New Item</h3>
+      <div class="form-row">
+        <input [(ngModel)]="createForm.name" placeholder="Item name *" class="input" (keydown.enter)="previewCreate()" />
+        <input [(ngModel)]="createForm.description" placeholder="Description" class="input" (keydown.enter)="previewCreate()" />
+        <input [(ngModel)]="createForm.price" type="number" step="0.01" placeholder="Price *" class="input" (keydown.enter)="previewCreate()" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" (click)="previewCreate()" [disabled]="!createForm.name.trim()">👁️ Preview & Create</button>
+        <button class="btn btn-sm btn-cancel" (click)="cancelCreate()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- Items Table -->
+  @if (loading) {
+    <div class="loading">Loading items...</div>
+  } @else if (items.length === 0) {
+    <div class="empty">No items yet. Click "New Item" to add one!</div>
+  } @else {
+    <div class="table-wrapper">
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th class="th-name">Name</th>
+            <th class="th-desc">Description</th>
+            <th class="th-price">Price</th>
+            <th class="th-date">Created</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items; track item.id) {
+            <tr class="item-row" [class.row-editing]="editingId === item.id">
+              <!-- Name -->
+              <td>
+                @if (editingId === item.id) {
+                  <input [(ngModel)]="editDraft.name" class="input-sm" />
+                } @else {
+                  <span class="item-name">{{ item.name }}</span>
+                }
+              </td>
+              <!-- Description -->
+              <td>
+                @if (editingId === item.id) {
+                  <input [(ngModel)]="editDraft.description" class="input-sm" />
+                } @else {
+                  <span class="item-desc">{{ item.description || '—' }}</span>
+                }
+              </td>
+              <!-- Price -->
+              <td>
+                @if (editingId === item.id) {
+                  <input [(ngModel)]="editDraft.price" type="number" step="0.01" class="input-sm" />
+                } @else {
+                  <span class="item-price">{{ priceStr(item) }}</span>
+                }
+              </td>
+              <!-- Created -->
+              <td class="td-date">{{ formatDate(item.createdAt) }}</td>
+              <!-- Actions -->
+              <td class="td-actions">
+                @if (editingId === item.id) {
+                  <div class="edit-actions">
+                    <button class="btn btn-sm btn-preview" (click)="previewUpdate()">👁️ Preview</button>
+                    <button class="btn btn-sm btn-save" (click)="confirmUpdate()">💾 Save</button>
+                    <button class="btn btn-sm btn-cancel" (click)="cancelEdit()">✕</button>
+                  </div>
+                } @else {
+                  <div class="row-actions">
+                    <button class="btn btn-sm btn-edit" (click)="startEdit(item)">✏️ Edit</button>
+                    <button class="btn btn-sm btn-delete" (click)="previewDelete(item)">🗑️ Delete</button>
+                  </div>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span>{{ items.length }} item{{ items.length !== 1 ? 's' : '' }} total</span>
+    </div>
+  }
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span>Angular 21 → Nginx → .NET 10 → PostgreSQL 17</span>
   </footer>
 </div>
