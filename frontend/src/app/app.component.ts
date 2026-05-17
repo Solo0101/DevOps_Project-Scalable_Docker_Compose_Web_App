@@ -37,14 +37,13 @@ export class AppComponent implements OnInit {
     this.loading = true;
     this.error = '';
     this.http.get<Item[]>('http://localhost:5000/api/items').subscribe({
-      next: (data) => {
+      next: (data: Item[]) => {
         this.items = data;
         this.loading = false;
       },
-      error: (err) => {
+      error: (error: unknown) => {
         this.error = 'Failed to load items. Make sure the backend is running.';
         this.loading = false;
-        console.error(err);
       }
     });
   }
@@ -59,9 +58,8 @@ export class AppComponent implements OnInit {
         this.successMessage = 'Item added successfully!';
         setTimeout(() => this.successMessage = '', 3000);
       },
-      error: (err) => {
+      error: (error: unknown) => {
         this.error = 'Failed to add item.';
-        console.error(err);
       }
     });
   }
@@ -69,9 +67,8 @@ export class AppComponent implements OnInit {
   deleteItem(id: number): void {
     this.http.delete(`http://localhost:5000/api/items/${id}`).subscribe({
       next: () => this.loadItems(),
-      error: (err) => {
+      error: (error: unknown) => {
         this.error = 'Failed to delete item.';
-        console.error(err);
       }
     });
   }
