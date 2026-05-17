@@ -32,26 +32,26 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│                    Docker Bridge Network                                │
+│                    Docker Bridge Network                              │
 │                                                                       │
-│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐        │
-│  │   Frontend   │───▶│   Load Balancer  │───▶│    Backend   │───▶│
-│  │  (Nginx +    │    │   (Nginx LB)     │    │  (.NET 10    │    │
-│  │   Angular 21)│    │   Round-Robin    │    │   API)       │    │
-│  │  :80         │    │   :8080          │    │  :5000 x N   │    │
-│  └──────────────┘    └──────────────────┘    └──────────────┘    │
-│       ▲                     ▲                     ▲                 │
-│       │                     │                     │                 │
-│  ┌────┴─────────────────────┴─────────────────────┴────┐           │
-│  │     Host: localhost:80 (frontend)                    │           │
-│  │     Host: localhost:8080 (proxy/LB)                  │           │
-│  └─────────────────────────────────────────────────────┘           │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐         │
+│  │   Frontend   │───▶│   Load Balancer  │───▶│    Backend   │───▶     │
+│  │  (Nginx +    │    │   (Nginx LB)     │    │  (.NET 10    │         │
+│  │   Angular 21)│    │   Round-Robin    │    │   API)       │         │
+│  │  :80         │    │   :8080          │    │  :5000 x N   │         │
+│  └──────────────┘    └──────────────────┘    └──────────────┘         │
+│       ▲                     ▲                     ▲                   │
+│       │                     │                     │                   │
+│  ┌────┴─────────────────────┴─────────────────────┴────┐              │
+│  │     Host: localhost:80 (frontend)                   │              │
+│  │     Host: localhost:8080 (proxy/LB)                 │              │
+│  └─────────────────────────────────────────────────────┘              │
 │                                                                       │
-│  ┌──────────────┐                                                    │
-│  │   Postgres   │                                                    │
-│  │   (17)       │                                                    │
-│  │   :5432      │                                                    │
-│  └──────────────┘                                                    │
+│  ┌──────────────┐                                                     │
+│  │   Postgres   │                                                     │
+│  │   (17)       │                                                     │
+│  │   :5432      │                                                     │
+│  └──────────────┘                                                     │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,9 +160,9 @@ Project/
 │           ├── app.component.html
 │           └── app.component.css
 │
-├── proxy/                          # Nginx Reverse Proxy / Load Balancer
-│   ├── Dockerfile                  # Lightweight nginx:alpine
-│   └── nginx.conf                  # Upstream backend pool + round-robin LB
+└── proxy/                          # Nginx Reverse Proxy / Load Balancer
+    ├── Dockerfile                  # Lightweight nginx:alpine
+    └── nginx.conf                  # Upstream backend pool + round-robin LB
 ```
 
 ---
