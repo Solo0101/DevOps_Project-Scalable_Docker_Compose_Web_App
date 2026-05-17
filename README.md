@@ -35,7 +35,7 @@
 │                    Docker Bridge Network                              │
 │                                                                       │
 │  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐         │
-│  │   Frontend   │───▶│   Load Balancer  │───▶│    Backend   │───▶     │
+│  │   Frontend   │───▶│   Load Balancer  │───▶│    Backend   │───▶    │
 │  │  (Nginx +    │    │   (Nginx LB)     │    │  (.NET 10    │         │
 │  │   Angular 21)│    │   Round-Robin    │    │   API)       │         │
 │  │  :80         │    │   :8080          │    │  :5000 x N   │         │
