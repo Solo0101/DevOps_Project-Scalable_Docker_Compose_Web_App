@@ -312,7 +312,10 @@ upstream backend_pool {
 docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --scale backend=3
 
 # Send 6 requests - should be distributed across 3 backends (2 each)
-for i in {1..6}; do curl -s http://localhost:5000/api/items | jq '.[0].name'; done
+# Linux:
+for i in {1..6}; do curl -s http://localhost:8080/api/items | jq '.[0].name'; done
+# Windows:
+1..6 | ForEach-Object { (Invoke-RestMethod -Uri "http://localhost:8080/api/items")[0].name }
 ```
 
 ### Volumes
